@@ -171,8 +171,8 @@ def Animate_Attitude_Set(quaternion_array, h):
 
     unit_z = np.array([0,0,1])
     #creating quaternions which describe 90 deg rotations from z ( to x and y body )
-    y_vec_q = np.array([-0.7071068, 0, 0, 0.7071068 ])
-    x_vec_q = np.array([ 0, 0.7071068, 0, 0.7071068 ])
+    y_vec_q = np.array([ 0.7071068, 0, 0, 0.7071068 ])
+    x_vec_q = np.array([ 0, -0.7071068, 0, 0.7071068 ])
     for i in range(timesteps):
         data_z[:,i] = Q_Tran_Vec(quaternion_array[:,i], unit_z)
 
