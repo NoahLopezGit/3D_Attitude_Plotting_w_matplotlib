@@ -60,6 +60,18 @@ def Q2PSI(quaternion):
     return PSI
 
 
+def Q_Tran_Q(q_tran, q_old):
+    a = Q2PSI(q_tran)
+    transform_matrix = np.matrix([ #if there is a better way to do this that would be great
+        [a[0,0], a[0,1], a[0,2], q_tran[0]],
+        [a[1,0], a[1,1], a[1,2], q_tran[1]],
+        [a[2,0], a[2,2], a[2,2], q_tran[2]],
+        [a[3,0], a[3,1], a[3,2], q_tran[3]]
+    ])
+    q_new = np.matmul(transform_matrix,q_old)
+    return  np.array([q_new[0,0],q_new[0,1],q_new[0,2],q_new[0,3]])#q_new
+
+
 #Finds trasnformation matrix from ECI -> ECEF frame
 def ECI2ECEF(datetime_object):
     #reminder; this is a passive transformation from a vector in the ECI frame to its representation in the ECEF frame
@@ -144,19 +156,36 @@ def Update_Vec(vec, quat):
 -----------------------------------------------------Plotting----------------------------------------------------
 '''
 #3D animation of attitude; TODO: fix so that input is only quaternion
-def Animate_Attitude_Set(data_y, data_x, data_z, h):
-
-    if np.shape(data_z)[0] != 3 or np.shape(data_y)[0] != 3 or np.shape(data_x)[0] != 3:
-        print("Input vectors exceed 3D")
+def Animate_Attitude_Set(quaternion_array, h):
+    
+    if np.shape(quaternion_array)[0] != 4:
+        print("Quaternion is not correct shape (needs to be 4 by X)")
         exit()
+    timesteps = np.shape(quaternion_array)[1]
+    
 
-    if np.shape(data_z)[1] == np.shape(data_y)[1] and np.shape(data_z)[1] == np.shape(data_x)[1]:
-        timesteps = len(data_y[1,:])
-    else:
-        print("Input vectors not same length")
-        exit()
+    #calculate vectors for each quaternion
+    data_z = np.zeros((3, np.shape(quaternion_array)[1]))
+    data_y = np.zeros((3, np.shape(quaternion_array)[1]))
+    data_x = np.zeros((3, np.shape(quaternion_array)[1]))
 
-    #nested for now
+    unit_z = np.array([0,0,1])
+    #creating quaternions which describe 90 deg rotations from z ( to x and y body )
+    y_vec_q = np.array([-0.7071068, 0, 0, 0.7071068 ])
+    x_vec_q = np.array([ 0, 0.7071068, 0, 0.7071068 ])
+    for i in range(timesteps):
+        data_z[:,i] = Q_Tran_Vec(quaternion_array[:,i], unit_z)
+
+        x_quaternion = Q_Tran_Q(x_vec_q, quaternion_array[:,i])#90 deg about y axis
+        data_x[:,i] = Q_Tran_Vec(x_quaternion, unit_z)
+
+        y_quaternion = Q_Tran_Q(y_vec_q, quaternion_array[:,i])#90 deg about y axis
+        data_y[:,i] = Q_Tran_Vec(y_quaternion, unit_z)
+
+        print(np.dot(data_x[:,i],data_z[:,i]))
+        print(np.dot(data_y[:,i],data_z[:,i]))
+
+    #Logitistics for plotting vectors
     def update(num, data_z, data_y, data_x, line1, line2, line3):
         b = np.array([[0, data_z[0,num]], [0, data_z[1,num]]]) 
         line1.set_data( b ) 
@@ -173,12 +202,7 @@ def Animate_Attitude_Set(data_y, data_x, data_z, h):
         a = np.array([0, data_x[2,num]])
         line3.set_3d_properties( a )
 
-
-
-        #fig.canvas.draw()
-        #fig.canvas.flush_events()
         
-    
     fig = plt.figure()
     ax = fig.add_subplot(projection='3d')
     line1, = ax.plot( [0, data_z[0,0]], [0, data_z[1,0]], [0, data_z[2,0]] )

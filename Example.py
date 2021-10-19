@@ -93,7 +93,7 @@ axs[1,1].plot( t, phi, 'r', t, theta, 'g', t, psi, 'b')
 plt.show()
 
 #sending data to 3d animator; this will play in 0.1x real speed 
-att.Animate_Attitude_Set(data_y, data_x, data_z, h)
+att.Animate_Attitude_Set(quaternion_plot, h)
 
 
 plt.plot(   t, w1_est, 'r', t, w2_est, 'g', t, w3_est, 'b',  
