@@ -3,6 +3,7 @@ import Attitude_Kinematics as att
 import numpy as np
 import datetime
 import csv
+import matplotlib.pyplot as plt
 
 class Orientation:
     def __init__(self,  date            = datetime.datetime(1,1,1,1,1,1),
@@ -137,6 +138,7 @@ def get_density(alt):
     rho     = rho_0*np.exp(-(alt-h0)/H)
     return rho
 
+
 #calculation of solar torque on plate in body frame
 def get_solartorque(sat_orientation, plate_array):
     #transformation Abi
@@ -144,13 +146,14 @@ def get_solartorque(sat_orientation, plate_array):
     Aoi     = get_Aio(sat_orientation.position, sat_orientation.velocity).transpose()
     Abi     = np.matmul( Abo, Aoi)
 
+    #sun-sat vector in body frame
+    r_sato  = get_rsato(sat_orientation.date, sat_orientation.position)
+    s       = np.matmul( Abi, r_sato)
+    s_unit = 1/np.linalg.norm(s)*s #satellite-sun vector in body frame
+
     #calculation
     L_srp_total = np.matrix([ [0],[0],[0] ]).astype(float)
     for plate in plate_array:
-        
-        #sun-sat vector in body frame
-        r_sato  = get_rsato(sat_orientation.date, sat_orientation.position)
-        s       = np.matmul( Abi, r_sato)
 
         #incidence angle of sun-sat vector and plate normal
         cos_theta_srp = np.matmul( plate.normal.transpose(), s )[0,0]
@@ -163,6 +166,53 @@ def get_solartorque(sat_orientation, plate_array):
         #calculation of solar presure torque of plate
         L_srp = np.cross( plate.lever.transpose(), F_srp.transpose() ).transpose()
         L_srp_total = L_srp_total + L_srp
+        
+    if np.linalg.norm(L_srp_total) < 10**(-15):
+        L_srp_total = np.matrix([
+            [0],
+            [0],
+            [0]
+        ])
+    else: 
+        L_srp_unit = 1/np.linalg.norm(L_srp_total)*L_srp_total
+
+    #plotting results of disturbance torques
+    fig = plt.figure()
+    ax  = plt.axes(projection='3d')
+    #creating 3d plot with plate vectors
+    i=0
+    for plate in plate_array:
+        if i == 0:
+            line = ax.plot( [0,plate.area*plate.normal[0]],
+                            [0,plate.area*plate.normal[1]],
+                            [0,plate.area*plate.normal[2]],
+                            'r', label="Plate Normal x Area Vector" ) #[x],[y],[z]
+        line = ax.plot( [0,plate.area*plate.normal[0]],
+                            [0,plate.area*plate.normal[1]],
+                            [0,plate.area*plate.normal[2]],
+                            'r' ) #[x],[y],[z]
+        i+=1
+
+    #plotting relative velocity in body frame
+    line = ax.plot( [0,s_unit[0]],
+                    [0,s_unit[1]],
+                    [0,s_unit[2]],
+                    'b', label="Sun-Satellite Vector")
+    #plotting resulting total torque vector in body frame
+    line = ax.plot( [0,L_srp_unit[0]],
+                    [0,L_srp_unit[1]],
+                    [0,L_srp_unit[2]],
+                    'g', label="Resultant Torque")
+
+    #axes and legend
+    ax.set_xlim3d([-1.5, 1.5])
+    ax.set_xlabel('X')
+    ax.set_ylim3d([-1.5, 1.5])
+    ax.set_ylabel('Y')
+    ax.set_zlim3d([-1.5, 1.5])
+    ax.set_zlabel('Z')
+    ax.legend()
+    plt.show()
     return L_srp_total
 
 
@@ -172,14 +222,16 @@ def get_aerotorque(sat_orientation, plate_array):
     Abo = get_dcm(sat_orientation.euler_angles, np.array([3,2,1]))
     Abi = np.matmul(Abo, Aoi)
 
+    #calculate Vrel in body
+    v_reli = sat_orientation.position + np.matrix(np.cross( Wo.transpose(), 
+                                                            sat_orientation.position.transpose() )).astype(float).transpose()
+    v_relb = np.matmul( Abi, v_reli )
+    v_relb_unit = 1/np.linalg.norm(v_relb)*v_relb
+    
     #calculation
     L_aero_total = np.matrix([ [0],[0],[0] ]).astype(float)
     for plate in plate_array:
-        #calculate Vrel in body
-        v_reli = sat_orientation.position + np.matrix(np.cross( Wo.transpose(), 
-                                                                sat_orientation.position.transpose() )).astype(float).transpose()
-        v_relb = np.matmul( Abi, v_reli )
-
+       
         #calculation force on plate due to aerodynamic pressure F_aero
         cos_theta_aero  = 1/np.linalg.norm(v_relb)*np.matmul( plate.normal.transpose(), v_relb)[0,0]
         alt             = np.linalg.norm(sat_orientation.position) - 6371.0
@@ -189,23 +241,142 @@ def get_aerotorque(sat_orientation, plate_array):
         #calculation of torque on plate due to aerodynamic pressure L_aero
         L_aero          = np.cross( plate.lever.transpose(), F_aero.transpose() ).transpose()
         L_aero_total    = L_aero_total + L_aero   
+
+    if np.linalg.norm(L_aero_total) < 10**(-15):
+        L_total_unit = np.matrix([
+            [0],
+            [0],
+            [0]
+        ])
+    else:
+        L_total_unit = 1/np.linalg.norm(L_aero_total)*L_aero_total 
+
+    #plotting results of disturbance torques
+    fig = plt.figure()
+    ax  = plt.axes(projection='3d')
+    #creating 3d plot with plate vectors
+    i=0
+    for plate in plate_array:
+        if i == 0:
+            line = ax.plot( [0,plate.area*plate.normal[0]],
+                            [0,plate.area*plate.normal[1]],
+                            [0,plate.area*plate.normal[2]],
+                            'r', label="Plate Normal x Area Vector" ) #[x],[y],[z]
+        line = ax.plot( [0,plate.area*plate.normal[0]],
+                            [0,plate.area*plate.normal[1]],
+                            [0,plate.area*plate.normal[2]],
+                            'r' ) #[x],[y],[z]
+        i+=1
+
+    #plotting relative velocity in body frame
+    line = ax.plot( [0,v_relb_unit[0]],
+                    [0,v_relb_unit[1]],
+                    [0,v_relb_unit[2]],
+                    'b', label="Relative Velocity")
+    #plotting resulting total torque vector in body frame
+    line = ax.plot( [0,L_total_unit[0]],
+                    [0,L_total_unit[1]],
+                    [0,L_total_unit[2]],
+                    'g', label="Resultant Torque")
+
+    #axes and legend
+    ax.set_xlim3d([-1.5, 1.5])
+    ax.set_xlabel('X')
+    ax.set_ylim3d([-1.5, 1.5])
+    ax.set_ylabel('Y')
+    ax.set_zlim3d([-1.5, 1.5])
+    ax.set_zlabel('Z')
+    ax.legend()
+    plt.show()
+
     return L_aero_total
+
 
 #calculated gravity torque from position, orientation and principle axis MOIs
 def get_gravitytorque(sat_orientation, Jp): 
+    '''
     psi     = sat_orientation.euler_angles[0]
     theta   = sat_orientation.euler_angles[1]
+    '''
+    #getting body orientation w.r.t. ECI
+    Aoi = get_Aio(sat_orientation.position, sat_orientation.velocity).transpose()
+    Abo = get_dcm(sat_orientation.euler_angles, np.array([3,2,1]))
+    Abi = np.matmul(Abo, Aoi)
+    
+    r = sat_orientation.position*10**3.0
     Rc      = np.linalg.norm(sat_orientation.position)*10**3.0
+    J_mat = np.matrix([
+        [Jp[0], 0,      0       ],
+        [0,     Jp[1],  0       ],
+        [0,     0,      Jp[2]   ]
+    ])
+    '''
     vec     = np.matrix([
         [(Jp[2]-Jp[1])*cosd(theta)**2.0*cosd(psi)*sind(psi) ],
         [(Jp[2]-Jp[0])*cosd(theta)*sind(theta)*cosd(psi)    ],
         [(Jp[0]-Jp[1])*cosd(theta)*sind(theta)*sind(psi)    ]
     ]).astype(float)
     L_grav  = 3*u/Rc**3.0*vec
+    '''
+    L_grav = 3*u/Rc**5.0*np.cross(  np.matmul( Abi, r ).transpose(),
+                                    np.matmul(J_mat, np.matmul( Abi, r ) ).transpose() ).transpose()
+
+    if np.linalg.norm(L_grav) > 10**(-15):
+        L_grav_unit = 1/np.linalg.norm(L_grav)*L_grav
+    else:
+        L_grav_unit = np.matrix([
+            [0],
+            [0],
+            [0]
+        ])
+    
+    #plotting
+    fig = plt.figure()
+    ax  = plt.axes(projection='3d')
+
+    #plotting local gravity vector in body frame
+    g_local = np.matmul( get_dcm(sat_orientation.euler_angles, np.array([3,2,1])),
+                         np.matrix([ [0], [0], [1] ]) ) #gravity vector in LVLH frame is [0,0,1]
+
+    #plotting principle axes of intertia (as relative size)
+    for i in range(3): #goes x,y,z
+        plot = np.array([   [0, 0],
+                            [0, 0],
+                            [0, 0] ]).astype(float)
+        plot[i,:] = np.array([-Jp[i]/np.linalg.norm(Jp), Jp[i]/np.linalg.norm(Jp)])
+        
+        line = ax.plot( plot[0,:],
+                        plot[1,:],
+                        plot[2,:],
+                        'r',label="Principle MOIs")
+    
+    #plotting local gravity vector in body frame
+    line = ax.plot( [0,g_local[0]],
+                    [0,g_local[1]],
+                    [0,g_local[2]],
+                    'g',label="Local Gravity")
+
+    #plotting torque due to gravity in body frame
+    line = ax.plot( [0,L_grav_unit[0]],
+                    [0,L_grav_unit[1]],
+                    [0,L_grav_unit[2]],
+                    'b',label='Gravity Torque Vector')
+    
+    #axes and legend
+    ax.set_xlim3d([-1.5, 1.5])
+    ax.set_xlabel('X')
+    ax.set_ylim3d([-1.5, 1.5])
+    ax.set_ylabel('Y')
+    ax.set_zlim3d([-1.5, 1.5])
+    ax.set_zlabel('Z')
+    ax.legend()
+    plt.show()
+    
     return L_grav
 
 
 def get_magnetictorque(sat_orientation, magnetic_residual):
+    residual_unit = 1/np.linalg.norm(magnetic_residual)*magnetic_residual
     r = 10**3.0*sat_orientation.position
     Bi = ( 3*np.matmul(m_vec.transpose(), r)[0,0]*r - np.linalg.norm(r)**2.0*m_vec) / np.linalg.norm(r)**5.0
     
@@ -215,7 +386,47 @@ def get_magnetictorque(sat_orientation, magnetic_residual):
     Abi = np.matmul(Abo, Aoi)
 
     #calculation of magnetic torque
-    L_magnetic = np.cross( magnetic_residual.transpose(), np.matmul(Abi, Bi).transpose() ).transpose()
+    Bb = np.matmul(Abi, Bi)
+    Bb_unit = 1/np.linalg.norm(Bb)*Bb
+    L_magnetic = np.cross( magnetic_residual.transpose(), Bb.transpose() ).transpose()
+    
+    if np.linalg.norm(L_magnetic) < 10**(-15):
+        L_mag_unit = np.matrix([
+            [0],
+            [0],
+            [0]
+        ])
+    else:
+        L_mag_unit = 1/np.linalg.norm(L_magnetic)*L_magnetic
+
+    #plotting
+    fig = plt.figure()
+    ax  = plt.axes(projection='3d')
+
+    #lines
+    line = ax.plot( [0,Bb_unit[0]],
+                    [0,Bb_unit[1]], 
+                    [0,Bb_unit[2]],
+                    'r',label="Earth Magnetic Field")
+    line = ax.plot( [0,residual_unit[0]],
+                    [0,residual_unit[1]],
+                    [0,residual_unit[2]],
+                    'g',label="Sat Magnetic Residual")
+    line = ax.plot( [0,L_mag_unit[0]],
+                    [0,L_mag_unit[1]],
+                    [0,L_mag_unit[2]],
+                    'b',label="Magnetic Torque")
+    
+    #axes and legend
+    ax.set_xlim3d([-1.5, 1.5])
+    ax.set_xlabel('X')
+    ax.set_ylim3d([-1.5, 1.5])
+    ax.set_ylabel('Y')
+    ax.set_zlim3d([-1.5, 1.5])
+    ax.set_zlabel('Z')
+    ax.legend()
+    plt.show()
+
     return L_magnetic
 
 
@@ -224,12 +435,12 @@ if __name__=="__main__":
     #calculating satellite configuration values
     #orientation
     date    = datetime.datetime(2021,11,3,10,9,0)
-    angles  = np.array([30,45,10]) #3-2-1 angles in order which they are applied 
+    angles  = np.array([45,45,45]) #3-2-1 angles in order which they are applied 
     angles  = np.multiply(np.pi/180, angles)
     position = np.matrix([
-        [6771],
         [0],
-        [0]
+        [0],
+        [6971]
     ]).astype(float)
     v_mag = np.sqrt(u/(np.linalg.norm(position)*10**3.0)) / (10**3.0)
     velocity = np.matrix([
@@ -245,42 +456,44 @@ if __name__=="__main__":
     sat_orientation.euler_angles = angles #in degrees
 
     #constructing plate(s) attributes
-    #doing a cube
+    #doing a rectangular prism
+    R_vec = np.array([0.7,0.1,0.2]) #this is the optical coeficients for the plates
+
     bot         = Plate()
     bot.area    = 1.0
-    bot.lever   = np.matrix([ [0],[0],[-0.5] ]).astype(float)
+    bot.lever   = np.matrix([ [0],[0],[-1.0] ]).astype(float)
     bot.normal  = np.matrix([ [0],[0],[-1.0] ]).astype(float)
-    bot.r_coef  = np.array([ 1/3, 1/3, 1/3 ])
+    bot.r_coef  = R_vec
 
     top         = Plate()
     top.area    = 1.0
-    top.lever   = np.matrix([ [0],[0],[0.5] ]).astype(float)
+    top.lever   = np.matrix([ [0],[0],[1.0] ]).astype(float)
     top.normal  = np.matrix([ [0],[0],[1.0] ]).astype(float)
-    top.r_coef  = np.array([ 1/3, 1/3, 1/3 ])
+    top.r_coef  = R_vec
     
     north           = Plate()
-    north.area      = 1.0
+    north.area      = 2.0
     north.lever     = np.matrix([ [0],[0.5],[0] ]).astype(float)
     north.normal    = np.matrix([ [0],[1.0],[0] ]).astype(float)
-    north.r_coef    = np.array([ 1/3, 1/3, 1/3 ])
+    north.r_coef    = R_vec
 
     south           = Plate()
-    south.area      = 1.0
+    south.area      = 2.0
     south.lever     = np.matrix([ [0],[-0.5],[0] ]).astype(float)
     south.normal    = np.matrix([ [0],[-1.0],[0] ]).astype(float)
-    south.r_coef    = np.array([ 1/3, 1/3, 1/3 ])
+    south.r_coef    = R_vec
 
     west        = Plate()
-    west.area   = 1.0
+    west.area   = 2.0
     west.lever  = np.matrix([ [-0.5],[0],[0] ]).astype(float)
     west.normal = np.matrix([ [-1.0],[0],[0] ]).astype(float)
-    west.r_coef = np.array([ 1/3, 1/3, 1/3 ])
+    west.r_coef = R_vec
 
     east        = Plate()
-    east.area   = 1.0
+    east.area   = 2.0
     east.lever  = np.matrix([ [0.5],[0],[0] ]).astype(float)
     east.normal = np.matrix([ [1.0],[0],[0] ]).astype(float)
-    east.r_coef = np.array([ 1/3, 1/3, 1/3 ])
+    east.r_coef = R_vec
 
     plate_array = [bot, top, south, west, east, north]
 
