@@ -51,9 +51,11 @@ Me  = 5.97219*10**24 #earth mass
 Gc  = 6.67408*10**-11 #gravitational constant
 u   = Me * Gc #earth gravitational constant
 #I THINK THIS MUST BE CONVERTED FROM NANO TO REG SI SO 10E-9 TODO: FIGURE OUT IF THIS IS CORRECT
-m_vec = 7.77*10**(21.0-9.0)*np.matrix([   [sind(169.7)*cosd(108.2)], 
+
+m_vec = 7.77*10**(22.0-7)*np.matrix([ [sind(169.7)*cosd(108.2)], 
                                     [sind(169.7)*sind(108.2)], 
                                     [cosd(169.7)            ] ]).astype(float)
+
 
 
 #gives sattelite-sun vector in ECI frame
